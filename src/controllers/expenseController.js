@@ -79,4 +79,44 @@ const deleteExpense = asyncHandler(async (req, res) => {
   res.json({ message: 'expense deleted' });
 });
 
-module.exports = { listExpenses, createExpense, updateExpense, deleteExpense };
+const generateMonthlyReport = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { month, year } = req.query;
+
+  if (!month || !year) {
+    return res.status(400).json({ message: 'Month and year are required' });
+  }
+
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+
+  const expenses = await Expense.findAll({
+    where: {
+      userId,
+      date: {
+        [Op.gte]: startDate,
+        [Op.lte]: endDate
+      }
+    },
+    include: [{ model: Category, as: 'category', attributes: ['name'] }]
+  });
+
+  if (expenses.length === 0) {
+    return res.json({ message: 'No expenses found for this month.' });
+  }
+
+  const report = expenses.reduce((acc, expense) => {
+    const categoryName = expense.category ? expense.category.name : 'Uncategorized';
+    if (!acc[categoryName]) {
+      acc[categoryName] = 0;
+    }
+    acc[categoryName] += parseFloat(expense.amount);
+    return acc;
+  }, {});
+
+  const total = Object.values(report).reduce((sum, value) => sum + value, 0);
+
+  res.json({ report, total });
+});
+
+module.exports = { listExpenses, createExpense, updateExpense, deleteExpense, generateMonthlyReport };
